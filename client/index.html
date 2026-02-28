@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BePirate — Trello Board Manager</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f5f7; color: #172b4d; }
+
+    header { background: #0079bf; color: #fff; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 20px; font-weight: 700; }
+    header select { padding: 6px 10px; border-radius: 4px; border: none; font-size: 14px; }
+
+    .toolbar { padding: 12px 24px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .toolbar input { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+    .toolbar button, .btn { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; background: #0079bf; color: #fff; }
+    .toolbar button:hover, .btn:hover { background: #026aa7; }
+    .btn-danger { background: #eb5a46; }
+    .btn-danger:hover { background: #cf513d; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    .kanban { display: flex; gap: 12px; padding: 16px 24px; overflow-x: auto; align-items: flex-start; }
+    .list { background: #ebecf0; border-radius: 6px; min-width: 220px; max-width: 220px; padding: 10px; flex-shrink: 0; }
+    .list h3 { font-size: 13px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .list .badge { font-size: 11px; background: #0079bf; color: #fff; border-radius: 10px; padding: 1px 7px; margin-left: 4px; font-weight: 600; }
+
+    .card { background: #fff; border-radius: 4px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.1); font-size: 13px; transition: background .15s; }
+    .card:hover { background: #e4f0f6; }
+    .card.selected { border-left: 3px solid #0079bf; }
+    .card .labels { display: flex; gap: 4px; margin-bottom: 4px; }
+    .card .label { width: 32px; height: 6px; border-radius: 3px; }
+
+    .panel { position: fixed; top: 0; right: 0; width: 400px; height: 100vh; background: #fff; box-shadow: -2px 0 8px rgba(0,0,0,.15); padding: 20px; overflow-y: auto; z-index: 10; }
+    .panel h2 { font-size: 18px; margin-bottom: 12px; }
+    .panel .close { position: absolute; top: 12px; right: 16px; cursor: pointer; font-size: 20px; background: none; border: none; color: #666; }
+    .panel section { margin-bottom: 16px; }
+    .panel section h4 { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #5e6c84; text-transform: uppercase; }
+    .panel textarea { width: 100%; height: 60px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 13px; }
+    .panel .comment { background: #f4f5f7; padding: 8px; border-radius: 4px; margin-bottom: 6px; font-size: 13px; }
+    .panel .comment .meta { font-size: 11px; color: #999; margin-bottom: 2px; }
+    .panel .attachment { font-size: 13px; margin-bottom: 4px; }
+    .panel .attachment a { color: #0079bf; }
+
+    .events { padding: 12px 24px; margin-top: 8px; }
+    .events h3 { font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .events .pulse { width: 8px; height: 8px; background: #61bd4f; border-radius: 50%; }
+    .events-list { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; background: #fff; }
+    .event { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
+    .event:last-child { border-bottom: none; }
+    .event .event-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .event .event-type { font-weight: 700; color: #0079bf; font-size: 12px; text-transform: uppercase; }
+    .event .event-time { font-size: 11px; color: #999; }
+    .event .event-detail { font-size: 12px; color: #333; }
+    .event .event-detail span { color: #888; }
+    .event .event-raw { margin-top: 6px; }
+    .event .event-raw summary { font-size: 11px; color: #999; cursor: pointer; }
+    .event .event-raw pre { font-size: 11px; background: #f4f5f7; padding: 8px; border-radius: 4px; overflow-x: auto; max-height: 200px; margin-top: 4px; }
+
+    .loading { text-align: center; padding: 40px; color: #999; }
+    .error { color: #eb5a46; padding: 8px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header>
+      <h1>BePirate</h1>
+      <select v-model="selectedBoardId" @change="loadBoard">
+        <option value="">Select a board...</option>
+        <option v-for="b in boards" :key="b.id" :value="b.id">{{ b.name }}</option>
+      </select>
+    </header>
+
+    <!-- Webhook toolbar -->
+    <div class="toolbar" v-if="selectedBoardId">
+      <span style="font-size:13px;font-weight:600;">Webhook:</span>
+      <input v-model="webhookURL" placeholder="Callback URL (ngrok)" style="width:260px;" />
+      <button @click="registerWebhook">Register</button>
+      <button class="btn-danger" @click="unregisterWebhook" v-if="activeWebhookId">Unregister</button>
+      <span v-if="activeWebhookId" style="font-size:12px;color:#61bd4f;">Active</span>
+    </div>
+
+    <!-- Kanban board -->
+    <div v-if="loading" class="loading">Loading board...</div>
+    <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
+    <div class="kanban" v-if="lists.length">
+      <div class="list" v-for="list in lists" :key="list.id">
+        <h3>{{ list.name }} <span class="badge">{{ list.cards.length }}</span></h3>
+        <div
+          class="card"
+          :class="{ selected: selectedCard && selectedCard.id === card.id }"
+          v-for="card in list.cards"
+          :key="card.id"
+          @click="selectCard(card)"
+        >
+          <div class="labels" v-if="card.labels && card.labels.length">
+            <span class="label" v-for="l in card.labels" :key="l.id" :style="{ background: l.color }"></span>
+          </div>
+          {{ card.name }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Card detail panel -->
+    <div class="panel" v-if="cardDetail">
+      <button class="close" @click="cardDetail = null; selectedCard = null;">&times;</button>
+      <h2>{{ cardDetail.name }}</h2>
+      <p style="font-size:12px;color:#999;margin-bottom:12px;">{{ cardDetail.shortUrl }}</p>
+
+      <!-- Move card -->
+      <section>
+        <h4>Move to</h4>
+        <select v-model="moveTargetListId" style="padding:6px;margin-right:8px;">
+          <option v-for="list in lists" :key="list.id" :value="list.id">{{ list.name }}</option>
+        </select>
+        <button class="btn btn-sm" @click="doMoveCard">Move</button>
+      </section>
+
+      <!-- Add comment -->
+      <section>
+        <h4>Add Comment</h4>
+        <textarea v-model="commentText" placeholder="Write a comment..."></textarea>
+        <button class="btn btn-sm" @click="doAddComment" style="margin-top:6px;">Post</button>
+      </section>
+
+      <!-- Upload attachment -->
+      <section>
+        <h4>Add Attachment</h4>
+        <input type="file" ref="fileInput" style="font-size:13px;" />
+        <button class="btn btn-sm" @click="doUpload" style="margin-top:6px;">Upload</button>
+      </section>
+
+      <!-- Existing comments -->
+      <section v-if="cardDetail.actions && cardDetail.actions.length">
+        <h4>Comments</h4>
+        <div class="comment" v-for="a in cardDetail.actions" :key="a.id">
+          <div class="meta">{{ a.memberCreator?.fullName }} &mdash; {{ new Date(a.date).toLocaleString() }}</div>
+          {{ a.data.text }}
+        </div>
+      </section>
+
+      <!-- Existing attachments -->
+      <section v-if="cardDetail.attachments && cardDetail.attachments.length">
+        <h4>Attachments</h4>
+        <div class="attachment" v-for="att in cardDetail.attachments" :key="att.id">
+          <a :href="att.url" target="_blank">{{ att.name }}</a>
+        </div>
+      </section>
+    </div>
+
+    <!-- Webhook events -->
+    <div class="events" v-if="activeWebhookId || webhookEvents.length">
+      <h3><span class="pulse" v-if="activeWebhookId"></span> Webhook Events ({{ webhookEvents.length }})</h3>
+      <div class="events-list" v-if="webhookEvents.length">
+        <div class="event" v-for="ev in webhookEvents" :key="ev.id">
+          <div class="event-header">
+            <span class="event-type">{{ ev.type }}</span>
+            <span class="event-time">{{ new Date(ev.timestamp).toLocaleTimeString() }}</span>
+          </div>
+          <div class="event-detail">
+            <template v-if="ev.card"><strong>{{ ev.card }}</strong></template>
+            <template v-if="ev.listBefore && ev.listAfter"> <span>moved from</span> {{ ev.listBefore }} <span>to</span> {{ ev.listAfter }}</template>
+            <template v-if="ev.text"> <span>comment:</span> {{ ev.text }}</template>
+            <template v-if="ev.memberCreator"> <span>by</span> {{ ev.memberCreator }}</template>
+          </div>
+          <details class="event-raw">
+            <summary>Raw data</summary>
+            <pre>{{ JSON.stringify(ev.raw, null, 2) }}</pre>
+          </details>
+        </div>
+      </div>
+      <p v-else style="font-size:13px;color:#999;">Waiting for events...</p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
