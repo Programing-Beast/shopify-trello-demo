@@ -1,9 +1,9 @@
 {
   "name": "trello-shopify",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "BePirate Trello Board Manager",
   "scripts": {
+    "dev": "vercel dev",
     "start": "node server/index.js"
   },
   "keywords": [],
@@ -11,10 +11,13 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@upstash/redis": "^1.34.3",
     "axios": "^1.13.6",
+    "busboy": "^1.6.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "form-data": "^4.0.1",
     "multer": "^2.1.0"
   }
 }
