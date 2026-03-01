@@ -69,7 +69,7 @@
       <h1>BePirate</h1>
       <select v-model="selectedBoardId" @change="loadBoard">
         <option value="">Select a board...</option>
-        <option v-for="b in boards" :key="b.id" :value="b.id">{{ b.name }}</option>
+        <option v-for="b in boards" :key="b.id" :value="b.id">{{ b.name }}{{ savedWebhooks[b.id] ? ' [webhook active]' : '' }}</option>
       </select>
     </header>
 
