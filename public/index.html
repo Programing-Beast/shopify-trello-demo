@@ -12,6 +12,12 @@
     header { background: #0079bf; color: #fff; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
     header h1 { font-size: 20px; font-weight: 700; }
     header select { padding: 6px 10px; border-radius: 4px; border: none; font-size: 14px; }
+    .header-spacer { flex: 1; }
+    .user-info { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .user-info .avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,.3); }
+    .user-info .avatar-placeholder { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,.3); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+    .logout-btn { background: rgba(255,255,255,.2); border: none; color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .logout-btn:hover { background: rgba(255,255,255,.35); }
 
     .toolbar { padding: 12px 24px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .toolbar input { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
@@ -44,8 +50,9 @@
     .panel .attachment a { color: #0079bf; }
 
     .events { padding: 12px 24px; margin-top: 8px; }
-    .events h3 { font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .events h3 { font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
     .events .pulse { width: 8px; height: 8px; background: #61bd4f; border-radius: 50%; }
+    .events .toggle-arrow { font-size: 12px; color: #999; }
     .events-list { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; background: #fff; }
     .event { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
     .event:last-child { border-bottom: none; }
@@ -60,10 +67,23 @@
 
     .loading { text-align: center; padding: 40px; color: #999; }
     .error { color: #eb5a46; padding: 8px; font-size: 13px; }
+
+    /* Toast notifications */
+    .toast-container { position: fixed; top: 16px; right: 16px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
+    .toast { background: #fff; border-radius: 6px; box-shadow: 0 2px 12px rgba(0,0,0,.15); padding: 12px 16px; font-size: 13px; max-width: 320px; animation: slideIn 0.3s ease; border-left: 4px solid #0079bf; }
+    .toast.webhook { border-left-color: #61bd4f; }
+    .toast.success { border-left-color: #61bd4f; }
+    .toast.error { border-left-color: #eb5a46; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
   </style>
 </head>
 <body>
   <div id="app">
+    <!-- Toast notifications -->
+    <div class="toast-container">
+      <div class="toast" :class="t.type" v-for="t in toasts" :key="t.id">{{ t.message }}</div>
+    </div>
+
     <!-- Header -->
     <header>
       <h1>BePirate</h1>
@@ -71,12 +91,19 @@
         <option value="">Select a board...</option>
         <option v-for="b in boards" :key="b.id" :value="b.id">{{ b.name }}{{ savedWebhooks[b.id] ? ' [webhook active]' : '' }}</option>
       </select>
+      <div class="header-spacer"></div>
+      <div class="user-info" v-if="currentUser">
+        <img v-if="currentUser.avatar" :src="currentUser.avatar" class="avatar" />
+        <div v-else class="avatar-placeholder">{{ currentUser.name?.charAt(0)?.toUpperCase() }}</div>
+        <span>{{ currentUser.name }}</span>
+        <button class="logout-btn" @click="logout">Logout</button>
+      </div>
     </header>
 
     <!-- Webhook toolbar -->
     <div class="toolbar" v-if="selectedBoardId">
       <span style="font-size:13px;font-weight:600;">Webhook:</span>
-      <input v-model="webhookURL" placeholder="Callback URL (ngrok)" style="width:260px;" />
+      <input v-model="webhookURL" placeholder="Callback URL" style="width:260px;" />
       <button @click="registerWebhook">Register</button>
       <button class="btn-danger" @click="unregisterWebhook" v-if="activeWebhookId">Unregister</button>
       <span v-if="activeWebhookId" style="font-size:12px;color:#61bd4f;">Active</span>
@@ -150,10 +177,14 @@
       </section>
     </div>
 
-    <!-- Webhook events -->
+    <!-- Webhook events (collapsible) -->
     <div class="events" v-if="activeWebhookId || webhookEvents.length">
-      <h3><span class="pulse" v-if="activeWebhookId"></span> Webhook Events ({{ webhookEvents.length }})</h3>
-      <div class="events-list" v-if="webhookEvents.length">
+      <h3 @click="showEvents = !showEvents">
+        <span class="pulse" v-if="activeWebhookId"></span>
+        Webhook Events ({{ webhookEvents.length }})
+        <span class="toggle-arrow">{{ showEvents ? '&#9660;' : '&#9654;' }}</span>
+      </h3>
+      <div class="events-list" v-if="showEvents && webhookEvents.length">
         <div class="event" v-for="ev in webhookEvents" :key="ev.id">
           <div class="event-header">
             <span class="event-type">{{ ev.type }}</span>
@@ -171,7 +202,7 @@
           </details>
         </div>
       </div>
-      <p v-else style="font-size:13px;color:#999;">Waiting for events...</p>
+      <p v-else-if="showEvents" style="font-size:13px;color:#999;">Waiting for events...</p>
     </div>
   </div>
 

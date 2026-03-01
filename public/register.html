@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BePirate — Register</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f5f7; color: #172b4d; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.12); padding: 40px; width: 100%; max-width: 480px; }
+    .card h1 { font-size: 24px; margin-bottom: 8px; color: #0079bf; }
+    .card p.sub { font-size: 14px; color: #5e6c84; margin-bottom: 24px; }
+    .steps { display: flex; gap: 8px; margin-bottom: 24px; }
+    .step { flex: 1; height: 4px; border-radius: 2px; background: #ddd; }
+    .step.active { background: #0079bf; }
+    .step.done { background: #61bd4f; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #5e6c84; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    input[type="text"], input[type="email"], input[type="password"] { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 16px; }
+    input:focus { outline: none; border-color: #0079bf; box-shadow: 0 0 0 2px rgba(0,121,191,.2); }
+    .btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 4px; font-size: 15px; font-weight: 600; cursor: pointer; background: #0079bf; color: #fff; margin-bottom: 8px; }
+    .btn:hover { background: #026aa7; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-green { background: #61bd4f; }
+    .btn-green:hover { background: #519839; }
+    .error { color: #eb5a46; font-size: 13px; margin-bottom: 12px; display: none; }
+    .success { color: #61bd4f; font-size: 13px; margin-bottom: 12px; display: none; }
+    .link { text-align: center; margin-top: 16px; font-size: 13px; }
+    .link a { color: #0079bf; text-decoration: none; }
+    .link a:hover { text-decoration: underline; }
+    .board-list { max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 16px; }
+    .board-item { padding: 10px 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .board-item:last-child { border-bottom: none; }
+    .board-item input[type="checkbox"] { margin: 0; }
+    .hidden { display: none !important; }
+    .avatar-preview { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; background: #ddd; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>BePirate</h1>
+    <p class="sub" id="stepTitle">Create your account</p>
+
+    <!-- Step indicators -->
+    <div class="steps">
+      <div class="step active" id="s1"></div>
+      <div class="step" id="s2"></div>
+      <div class="step" id="s3"></div>
+    </div>
+
+    <div class="error" id="error"></div>
+    <div class="success" id="success"></div>
+
+    <!-- Step 1: Account creation -->
+    <div id="step1">
+      <form id="registerForm">
+        <label for="name">Full Name</label>
+        <input type="text" id="name" required placeholder="Your name" />
+        <label for="email">Email</label>
+        <input type="email" id="email" required placeholder="you@example.com" />
+        <label for="password">Password</label>
+        <input type="password" id="password" required placeholder="Min 6 characters" minlength="6" />
+        <label>Avatar (optional)</label>
+        <input type="file" id="avatarInput" accept="image/*" style="font-size:13px;margin-bottom:16px;" />
+        <img class="avatar-preview hidden" id="avatarPreview" />
+        <button type="submit" class="btn" id="registerBtn">Create Account</button>
+      </form>
+      <div class="link">Already have an account? <a href="/login.html">Sign in</a></div>
+    </div>
+
+    <!-- Step 2: Connect Trello -->
+    <div id="step2" class="hidden">
+      <p style="font-size:14px;margin-bottom:16px;">Connect your Trello account to manage boards and receive webhook notifications.</p>
+      <button class="btn btn-green" id="connectTrelloBtn">Connect Trello Account</button>
+      <button class="btn" style="background:#999;" id="skipTrelloBtn">Skip for now</button>
+    </div>
+
+    <!-- Step 3: Select boards for webhooks -->
+    <div id="step3" class="hidden">
+      <p style="font-size:14px;margin-bottom:16px;">Select boards to register webhooks for real-time updates:</p>
+      <div class="board-list" id="boardList"></div>
+      <button class="btn btn-green" id="registerWebhooksBtn">Register Webhooks & Go to Dashboard</button>
+      <button class="btn" style="background:#999;" id="skipWebhooksBtn">Skip — Go to Dashboard</button>
+    </div>
+  </div>
+
+  <script>
+    let currentStep = 1;
+    let avatarBase64 = '';
+    let trelloApiKey = '';
+    let appUrl = '';
+
+    const errorEl = document.getElementById('error');
+    const successEl = document.getElementById('success');
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.style.display = 'block';
+      successEl.style.display = 'none';
+    }
+    function showSuccess(msg) {
+      successEl.textContent = msg;
+      successEl.style.display = 'block';
+      errorEl.style.display = 'none';
+    }
+    function clearMessages() {
+      errorEl.style.display = 'none';
+      successEl.style.display = 'none';
+    }
+
+    function goToStep(n) {
+      currentStep = n;
+      document.getElementById('step1').classList.toggle('hidden', n !== 1);
+      document.getElementById('step2').classList.toggle('hidden', n !== 2);
+      document.getElementById('step3').classList.toggle('hidden', n !== 3);
+      for (let i = 1; i <= 3; i++) {
+        const el = document.getElementById('s' + i);
+        el.className = 'step' + (i < n ? ' done' : i === n ? ' active' : '');
+      }
+      const titles = { 1: 'Create your account', 2: 'Connect Trello', 3: 'Select boards' };
+      document.getElementById('stepTitle').textContent = titles[n];
+      clearMessages();
+    }
+
+    function apiFetch(url, opts = {}) {
+      const token = localStorage.getItem('token');
+      const headers = { ...(opts.headers || {}) };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      return fetch(url, { ...opts, headers });
+    }
+
+    // Check if user came back from login or auth-callback with ?step=trello
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('step') === 'trello' && localStorage.getItem('token')) {
+      (async () => {
+        // Check if Trello is already connected (coming back from auth-callback)
+        try {
+          const res = await apiFetch('/api/auth/me');
+          const user = await res.json();
+          if (user.trelloConnected) {
+            await loadBoardsForSelection();
+            goToStep(3);
+            return;
+          }
+        } catch { /* ignore */ }
+        initTrelloStep();
+      })();
+    }
+
+    // Avatar preview
+    document.getElementById('avatarInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        avatarBase64 = reader.result;
+        const preview = document.getElementById('avatarPreview');
+        preview.src = avatarBase64;
+        preview.classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Step 1: Register
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearMessages();
+      const btn = document.getElementById('registerBtn');
+      btn.disabled = true;
+      btn.textContent = 'Creating account...';
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: document.getElementById('name').value,
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value,
+            avatar: avatarBase64,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+
+        // Upload avatar if provided
+        if (avatarBase64) {
+          await apiFetch('/api/auth/avatar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ avatar: avatarBase64 }),
+          });
+        }
+
+        initTrelloStep();
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    });
+
+    async function initTrelloStep() {
+      // Fetch config for Trello API key
+      try {
+        const res = await fetch('/api/auth/config');
+        const config = await res.json();
+        trelloApiKey = config.trelloApiKey;
+        appUrl = config.appUrl || window.location.origin;
+      } catch {
+        trelloApiKey = '';
+        appUrl = window.location.origin;
+      }
+      goToStep(2);
+    }
+
+    // Step 2: Connect Trello
+    document.getElementById('connectTrelloBtn').addEventListener('click', () => {
+      const returnUrl = appUrl + '/auth-callback.html';
+      const authUrl = `https://trello.com/1/authorize?expiration=never&name=BePirate&scope=read,write&response_type=token&key=${trelloApiKey}&return_url=${encodeURIComponent(returnUrl)}&callback_method=fragment`;
+      window.location.href = authUrl;
+    });
+
+    document.getElementById('skipTrelloBtn').addEventListener('click', () => {
+      window.location.href = '/';
+    });
+
+    // Step 3: Select boards & register webhooks
+    document.getElementById('registerWebhooksBtn').addEventListener('click', async () => {
+      const checkboxes = document.querySelectorAll('#boardList input[type="checkbox"]:checked');
+      if (checkboxes.length === 0) {
+        showError('Select at least one board or click Skip');
+        return;
+      }
+
+      const btn = document.getElementById('registerWebhooksBtn');
+      btn.disabled = true;
+      btn.textContent = 'Registering...';
+      clearMessages();
+
+      const webhookURL = appUrl + '/api/webhooks/trello';
+      let count = 0;
+
+      for (const cb of checkboxes) {
+        try {
+          await apiFetch('/api/webhooks/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callbackURL: webhookURL, boardId: cb.value }),
+          });
+          count++;
+        } catch { /* skip failed boards */ }
+      }
+
+      showSuccess(`Registered webhooks for ${count} board(s). Redirecting...`);
+      setTimeout(() => { window.location.href = '/'; }, 1000);
+    });
+
+    document.getElementById('skipWebhooksBtn').addEventListener('click', () => {
+      window.location.href = '/';
+    });
+
+    // Called from auth-callback.html after Trello token is saved
+    window.addEventListener('message', async (e) => {
+      if (e.data?.type === 'trello-connected') {
+        showSuccess('Trello connected successfully!');
+        await loadBoardsForSelection();
+        goToStep(3);
+      }
+    });
+
+    async function loadBoardsForSelection() {
+      const list = document.getElementById('boardList');
+      list.innerHTML = '<div style="padding:12px;color:#999;">Loading boards...</div>';
+      try {
+        const res = await apiFetch('/api/boards');
+        const boards = await res.json();
+        if (!res.ok) throw new Error(boards.error || 'Failed');
+        list.innerHTML = boards.map(b =>
+          `<label class="board-item"><input type="checkbox" value="${b.id}" /> ${b.name}</label>`
+        ).join('');
+      } catch (err) {
+        list.innerHTML = '<div style="padding:12px;color:#eb5a46;">Failed to load boards</div>';
+      }
+    }
+  </script>
+</body>
+</html>

@@ -11,6 +11,8 @@ const handler = async (req, res) => {
     const action = req.body?.action || {};
     const model = req.body?.model || {};
 
+    const boardId = action.data?.board?.id || model.id || null;
+
     const event = {
       id: Date.now(),
       timestamp: new Date().toISOString(),
@@ -24,8 +26,23 @@ const handler = async (req, res) => {
       raw: action,
     };
 
-    await store.addEvent(event);
-    console.log(`Webhook [${event.type}]: card="${event.card}" listBefore="${event.listBefore}" listAfter="${event.listAfter}"`);
+    // Route event to the user who owns this board
+    if (boardId) {
+      try {
+        const email = await store.getUserForBoard(boardId);
+        if (email) {
+          await store.addUserEvent(email, event);
+          console.log(`Webhook [${event.type}] → user=${email}: card="${event.card}"`);
+          return res.status(200).end();
+        }
+      } catch (err) {
+        console.error(`Webhook store error for board=${boardId}:`, err.message);
+        return res.status(200).end();
+      }
+    }
+
+    // No board mapping found — log and accept
+    console.log(`Webhook [${event.type}]: no user mapping for board=${boardId}`);
     return res.status(200).end();
   }
 

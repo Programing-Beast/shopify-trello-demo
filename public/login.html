@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BePirate — Login</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f5f7; color: #172b4d; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.12); padding: 40px; width: 100%; max-width: 400px; }
+    .card h1 { font-size: 24px; margin-bottom: 8px; color: #0079bf; }
+    .card p.sub { font-size: 14px; color: #5e6c84; margin-bottom: 24px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #5e6c84; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    input[type="email"], input[type="password"] { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 16px; }
+    input:focus { outline: none; border-color: #0079bf; box-shadow: 0 0 0 2px rgba(0,121,191,.2); }
+    .btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 4px; font-size: 15px; font-weight: 600; cursor: pointer; background: #0079bf; color: #fff; }
+    .btn:hover { background: #026aa7; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error { color: #eb5a46; font-size: 13px; margin-bottom: 12px; display: none; }
+    .link { text-align: center; margin-top: 16px; font-size: 13px; }
+    .link a { color: #0079bf; text-decoration: none; }
+    .link a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>BePirate</h1>
+    <p class="sub">Sign in to your account</p>
+    <div class="error" id="error"></div>
+    <form id="loginForm">
+      <label for="email">Email</label>
+      <input type="email" id="email" required placeholder="you@example.com" />
+      <label for="password">Password</label>
+      <input type="password" id="password" required placeholder="Your password" />
+      <button type="submit" class="btn" id="submitBtn">Sign In</button>
+    </form>
+    <div class="link">Don't have an account? <a href="/register.html">Register</a></div>
+  </div>
+
+  <script>
+    // If already logged in, redirect
+    if (localStorage.getItem('token')) {
+      window.location.href = '/';
+    }
+
+    const form = document.getElementById('loginForm');
+    const errorEl = document.getElementById('error');
+    const submitBtn = document.getElementById('submitBtn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Login failed');
+
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+
+        // If Trello not connected, go to register flow step 2
+        if (!data.user.trelloConnected) {
+          window.location.href = '/register.html?step=trello';
+        } else {
+          window.location.href = '/';
+        }
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BePirate — Connecting Trello...</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f5f7; color: #172b4d; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.12); padding: 40px; width: 100%; max-width: 400px; text-align: center; }
+    .card h2 { font-size: 20px; margin-bottom: 12px; color: #0079bf; }
+    .status { font-size: 14px; color: #5e6c84; }
+    .error { color: #eb5a46; }
+    .success { color: #61bd4f; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>BePirate</h2>
+    <p class="status" id="status">Connecting your Trello account...</p>
+  </div>
+
+  <script>
+    (async function() {
+      const statusEl = document.getElementById('status');
+
+      // Extract token from URL hash (#token=xxx)
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      let trelloToken = params.get('token');
+
+      // Trello sometimes returns the token directly after #
+      if (!trelloToken && hash && !hash.includes('=')) {
+        trelloToken = hash;
+      }
+
+      if (!trelloToken) {
+        statusEl.textContent = 'No Trello token received. Please try again.';
+        statusEl.className = 'status error';
+        return;
+      }
+
+      const jwt = localStorage.getItem('token');
+      if (!jwt) {
+        statusEl.textContent = 'Not logged in. Please log in first.';
+        statusEl.className = 'status error';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/connect-trello', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + jwt,
+          },
+          body: JSON.stringify({ trelloToken }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save Trello token');
+
+        // Update stored user info
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        user.trelloConnected = true;
+        localStorage.setItem('user', JSON.stringify(user));
+
+        statusEl.textContent = 'Trello connected! Redirecting...';
+        statusEl.className = 'status success';
+
+        // Notify opener (register page) if it exists
+        if (window.opener) {
+          window.opener.postMessage({ type: 'trello-connected' }, '*');
+          setTimeout(() => window.close(), 500);
+        } else {
+          // Redirect to register page step 3 (board selection)
+          setTimeout(() => {
+            window.location.href = '/register.html?step=trello';
+          }, 1000);
+        }
+      } catch (err) {
+        statusEl.textContent = 'Error: ' + err.message;
+        statusEl.className = 'status error';
+      }
+    })();
+  </script>
+</body>
+</html>
