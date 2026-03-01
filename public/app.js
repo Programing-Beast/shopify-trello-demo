@@ -1,4 +1,4 @@
-const { createApp, ref, onMounted } = Vue;
+const { createApp, ref, watch, onMounted } = Vue;
 
 createApp({
   setup() {
@@ -16,8 +16,9 @@ createApp({
     const fileInput = ref(null);
 
     // Webhooks
-    const webhookURL = ref('');
+    const webhookURL = ref(window.location.origin + '/api/webhooks/trello');
     const activeWebhookId = ref('');
+    const savedWebhooks = ref({});
     const webhookEvents = ref([]);
     let pollInterval = null;
     let lastVersion = 0;
@@ -31,6 +32,13 @@ createApp({
       }
     }
 
+    async function fetchSavedWebhooks() {
+      try {
+        const res = await fetch('/api/webhooks/list');
+        savedWebhooks.value = await res.json();
+      } catch { /* ignore */ }
+    }
+
     async function loadBoard() {
       if (!selectedBoardId.value) { lists.value = []; return; }
       loading.value = true;
@@ -42,6 +50,14 @@ createApp({
         errorMsg.value = 'Failed to load board: ' + e.message;
       } finally {
         loading.value = false;
+      }
+      // Load saved webhook for this board
+      const saved = savedWebhooks.value[selectedBoardId.value];
+      if (saved) {
+        activeWebhookId.value = saved.webhookId;
+        webhookURL.value = saved.callbackURL;
+      } else {
+        activeWebhookId.value = '';
       }
     }
 
@@ -115,6 +131,11 @@ createApp({
         const data = await res.json();
         if (data.id) {
           activeWebhookId.value = data.id;
+          savedWebhooks.value[selectedBoardId.value] = {
+            webhookId: data.id,
+            callbackURL: webhookURL.value,
+            boardId: selectedBoardId.value,
+          };
           startPolling();
         } else {
           errorMsg.value = 'Webhook registration failed: ' + JSON.stringify(data);
@@ -128,8 +149,8 @@ createApp({
       if (!activeWebhookId.value) return;
       try {
         await fetch(`/api/webhooks/${activeWebhookId.value}`, { method: 'DELETE' });
+        delete savedWebhooks.value[selectedBoardId.value];
         activeWebhookId.value = '';
-        stopPolling();
       } catch (e) {
         errorMsg.value = 'Failed to unregister webhook: ' + e.message;
       }
@@ -142,10 +163,8 @@ createApp({
         webhookEvents.value = data.events;
         if (data.version > lastVersion) {
           lastVersion = data.version;
-          // Auto-refresh board when webhook events arrive
           if (selectedBoardId.value) {
             await loadBoard();
-            // Also refresh open card detail if any
             if (cardDetail.value) {
               await selectCard({ id: cardDetail.value.id });
             }
@@ -156,7 +175,7 @@ createApp({
 
     function startPolling() {
       stopPolling();
-      pollEvents(); // poll immediately
+      pollEvents();
       pollInterval = setInterval(pollEvents, 3000);
     }
 
@@ -164,16 +183,16 @@ createApp({
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
     }
 
-    onMounted(() => {
-      fetchBoards();
-      // Always poll for events (in case server already has webhook events from before)
+    onMounted(async () => {
+      await fetchSavedWebhooks();
+      await fetchBoards();
       startPolling();
     });
 
     return {
       boards, selectedBoardId, lists, loading, errorMsg,
       selectedCard, cardDetail, moveTargetListId, commentText, fileInput,
-      webhookURL, activeWebhookId, webhookEvents,
+      webhookURL, activeWebhookId, savedWebhooks, webhookEvents,
       loadBoard, selectCard, doMoveCard, doAddComment, doUpload,
       registerWebhook, unregisterWebhook,
     };
